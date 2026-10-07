@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Поиск документов</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f4f1ea;
+      --paper: #fffdf8;
+      --ink: #1c1915;
+      --muted: #6d655c;
+      --line: #e4ddd2;
+      --accent: #9a3412;
+      --accent-ink: #fff7ed;
+      --danger: #9f1239;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: Georgia, "Iowan Old Style", "Palatino Linotype", serif;
+      background: var(--bg);
+      color: var(--ink);
+    }
+
+    main {
+      width: min(880px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 48px 0 72px;
+    }
+
+    header p {
+      margin: 8px 0 0;
+      color: var(--muted);
+      font-family: "Segoe UI", sans-serif;
+      font-size: 15px;
+    }
+
+    form {
+      display: flex;
+      gap: 8px;
+      margin-top: 28px;
+    }
+
+    input {
+      flex: 1;
+      border: 1px solid var(--line);
+      background: var(--paper);
+      color: var(--ink);
+      border-radius: 10px;
+      padding: 12px 14px;
+      font: 16px/1.4 "Segoe UI", sans-serif;
+    }
+
+    button, .text-toggle {
+      border: 0;
+      border-radius: 10px;
+      padding: 12px 16px;
+      font: 600 15px/1 "Segoe UI", sans-serif;
+      cursor: pointer;
+    }
+
+    button[type="submit"] {
+      background: var(--accent);
+      color: var(--accent-ink);
+    }
+
+    button:disabled { opacity: 0.6; cursor: wait; }
+
+    .status {
+      min-height: 24px;
+      margin: 16px 0 8px;
+      font-family: "Segoe UI", sans-serif;
+      color: var(--muted);
+    }
+
+    .status.error { color: var(--danger); }
+
+    article {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 16px 18px 14px;
+      margin-top: 12px;
+    }
+
+    .meta {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: baseline;
+      font-family: "Segoe UI", sans-serif;
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .rubrics {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin: 10px 0;
+    }
+
+    .rubrics span {
+      font-family: "Segoe UI", sans-serif;
+      font-size: 12px;
+      background: #f3ece3;
+      border-radius: 999px;
+      padding: 4px 8px;
+    }
+
+    .text {
+      white-space: pre-wrap;
+      line-height: 1.45;
+      margin: 0;
+    }
+
+    .actions {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 12px;
+    }
+
+    .text-toggle, .delete {
+      background: transparent;
+      color: var(--accent);
+      padding: 8px 0;
+    }
+
+    .delete { color: var(--danger); }
+
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>Поиск документов</h1>
+      <p>До 20 самых новых документов, в тексте которых есть все слова запроса.</p>
+    </header>
+    <form id="search-form">
+      <input id="query" name="text" type="search" placeholder="например, конкурс" autocomplete="off" required>
+      <button type="submit">Найти</button>
+    </form>
+    <div id="status" class="status"></div>
+    <section id="results"></section>
+  </main>
+  <script>
+    const form = document.querySelector("#search-form");
+    const queryInput = document.querySelector("#query");
+    const statusNode = document.querySelector("#status");
+    const resultsNode = document.querySelector("#results");
+
+    function setStatus(text, isError) {
+      statusNode.textContent = text;
+      statusNode.classList.toggle("error", Boolean(isError));
+    }
+
+    function formatDate(value) {
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return value;
+      return new Intl.DateTimeFormat("ru-RU", {
+        dateStyle: "medium",
+        timeStyle: "short",
+      }).format(date);
+    }
+
+    function renderDocuments(documents) {
+      resultsNode.replaceChildren();
+      if (documents.length === 0) {
+        setStatus("Ничего не найдено.");
+        return;
+      }
+      setStatus(documents.length === 20
+        ? "Показаны 20 самых новых совпадений."
+        : `Найдено ${documents.length}.`);
+      for (const document of documents) {
+        resultsNode.append(renderDocument(document));
+      }
+    }
+
+    function renderDocument(document) {
+      const card = window.document.createElement("article");
+      const preview = document.text.length > 500 ? document.text.slice(0, 500) + "…" : document.text;
+      const folded = document.text.length > 500;
+
+      card.innerHTML = `
+        <div class="meta">
+          <time datetime="${document.created_date}">${formatDate(document.created_date)}</time>
+          <span>id ${document.id}</span>
+        </div>
+        <div class="rubrics"></div>
+        <p class="text"></p>
+        <div class="actions">
+          <button type="button" class="text-toggle${folded ? "" : " hidden"}">Показать целиком</button>
+          <button type="button" class="delete">Удалить</button>
+        </div>
+      `;
+      const rubrics = card.querySelector(".rubrics");
+      for (const rubric of document.rubrics) {
+        const chip = window.document.createElement("span");
+        chip.textContent = rubric;
+        rubrics.append(chip);
+      }
+      const textNode = card.querySelector(".text");
+      textNode.textContent = preview;
+      const toggle = card.querySelector(".text-toggle");
+      let expanded = false;
+      toggle.addEventListener("click", () => {
+        expanded = !expanded;
+        textNode.textContent = expanded ? document.text : preview;
+        toggle.textContent = expanded ? "Свернуть" : "Показать целиком";
+      });
+      card.querySelector(".delete").addEventListener("click", () => deleteDocument(document.id, card));
+      return card;
+    }
+
+    async function deleteDocument(id, card) {
+      if (!window.confirm(`Удалить документ ${id}?`)) return;
+      const response = await fetch(`/documents/${id}`, { method: "DELETE" });
+      if (response.status === 204) {
+        card.remove();
+        const left = resultsNode.children.length;
+        setStatus(left ? `Документ ${id} удалён. На странице осталось ${left}.` : "Документ удалён. Список пуст.");
+        return;
+      }
+      const payload = await response.json().catch(() => ({}));
+      setStatus(payload.detail || "Не удалось удалить документ.", true);
+    }
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const text = queryInput.value.trim();
+      if (!text) {
+        setStatus("Введите текст запроса.", true);
+        return;
+      }
+      const button = form.querySelector("button");
+      button.disabled = true;
+      setStatus("Ищем…");
+      resultsNode.replaceChildren();
+      try {
+        const response = await fetch(`/documents/search?${new URLSearchParams({ text })}`);
+        const payload = await response.json();
+        if (!response.ok) {
+          setStatus(payload.detail || "Поиск не выполнился.", true);
+          return;
+        }
+        renderDocuments(payload);
+      } catch {
+        setStatus("Нет связи с сервисом.", true);
+      } finally {
+        button.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>
